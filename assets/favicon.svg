@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Vibrant background gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="50%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+    
+    <!-- Glass morphism gradient -->
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.3)"/>
+      <stop offset="50%" stop-color="rgba(255,255,255,0.1)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.2)"/>
+    </linearGradient>
+    
+    <!-- Envelope gradient -->
+    <linearGradient id="envGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F0F9FF"/>
+      <stop offset="100%" stop-color="#E0F2FE"/>
+    </linearGradient>
+    
+    <!-- Flap gradient -->
+    <linearGradient id="flapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#F97316"/>
+    </linearGradient>
+    
+    <!-- Text gradient -->
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    
+    <!-- Blur filter for depth -->
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4"/>
+    </filter>
+    
+    <!-- Shadow filter -->
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.3"/>
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.2"/>
+    </filter>
+    
+    <!-- Inner glow -->
+    <filter id="innerGlow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Main background with vibrant gradient -->
+  <rect width="512" height="512" rx="120" fill="url(#bgGrad)"/>
+  
+  <!-- Glass morphism overlay -->
+  <rect width="512" height="512" rx="120" 
+        fill="url(#glassGrad)" 
+        opacity="0.6"/>
+  
+  <!-- Background decoration circles for depth -->
+  <circle cx="100" cy="100" r="60" fill="rgba(255,255,255,0.1)" filter="url(#blur)"/>
+  <circle cx="420" cy="420" r="80" fill="rgba(255,255,255,0.08)" filter="url(#blur)"/>
+  <circle cx="450" cy="80" r="40" fill="rgba(255,255,255,0.12)" filter="url(#blur)"/>
+
+  <!-- Envelope back shadow -->
+  <rect x="125" y="175" width="272" height="170" rx="18"
+        fill="rgba(0,0,0,0.2)" 
+        filter="url(#blur)"/>
+
+  <!-- Main envelope with glass effect -->
+  <rect x="120" y="170" width="272" height="170" rx="18"
+        fill="url(#envGrad)" 
+        filter="url(#shadow)"
+        opacity="0.9"/>
+  
+  <!-- Glass highlight on envelope -->
+  <rect x="120" y="170" width="272" height="85" rx="18"
+        fill="rgba(255,255,255,0.4)" 
+        opacity="0.6"/>
+
+  <!-- Envelope flap shadow -->
+  <polygon points="256,265 120,175 392,175"
+           fill="rgba(0,0,0,0.15)" 
+           filter="url(#blur)"/>
+
+  <!-- Flap with vibrant gradient -->
+  <polygon points="256,260 120,170 392,170"
+           fill="url(#flapGrad)" 
+           filter="url(#shadow)"
+           opacity="0.95"/>
+  
+  <!-- Flap glass highlight -->
+  <polygon points="256,245 120,170 392,170"
+           fill="rgba(255,255,255,0.5)" 
+           opacity="0.7"/>
+
+  <!-- Text shadow for depth -->
+  <text x="258" y="247"
+        font-family="Segoe UI, Arial, sans-serif"
+        font-size="110"
+        font-weight="900"
+        fill="rgba(0,0,0,0.3)"
+        text-anchor="middle"
+        filter="url(#blur)">
+    S
+  </text>
+
+  <!-- Bold S with gradient -->
+  <text x="256" y="245"
+        font-family="Segoe UI, Arial, sans-serif"
+        font-size="110"
+        font-weight="900"
+        fill="url(#textGrad)"
+        text-anchor="middle"
+        filter="url(#innerGlow)">
+    S
+  </text>
+  
+  <!-- Text highlight for glass effect -->
+  <text x="256" y="235"
+        font-family="Segoe UI, Arial, sans-serif"
+        font-size="110"
+        font-weight="900"
+        fill="rgba(255,255,255,0.3)"
+        text-anchor="middle"
+        opacity="0.8">
+    S
+  </text>
+  
+  <!-- Top glass reflection -->
+  <ellipse cx="256" cy="120" rx="180" ry="60" 
+           fill="rgba(255,255,255,0.15)" 
+           filter="url(#blur)"/>
+</svg>

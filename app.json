@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Email",
+    "slug": "Email",
+    "scheme": "email",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#8B5CF6"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stratummail.email"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#8B5CF6"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.stratummail.email"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "meta": {
+        "description": "StratumMail Mzansi - Modern email client for South African businesses"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "stratummail-email"
+      }
+    }
+  }
+}
