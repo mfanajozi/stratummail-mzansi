@@ -27,8 +27,6 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro",
-      "output": "single",
       "meta": {
         "description": "StratumMail Mzansi - Modern email client for South African businesses"
       }
