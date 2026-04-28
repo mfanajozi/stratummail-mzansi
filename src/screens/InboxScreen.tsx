@@ -16,7 +16,7 @@ import { groupEmailsByDate } from '../utils/dateUtils';
 import { colors, spacing, fontSize, borderRadius } from '../theme';
 import { emailService, folderService } from '../services/api';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://stratummail-mzansi.onrender.com/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export function InboxScreen({ navigation }: any) {
   const { accounts, activeAccountId } = useAccountsStore();

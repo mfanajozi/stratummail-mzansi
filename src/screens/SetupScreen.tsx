@@ -16,7 +16,7 @@ import { useAccountsStore } from '../store';
 import { detectImapSettings, validateEmail } from '../utils/imapDetect';
 import { colors, spacing, fontSize, borderRadius } from '../theme';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://stratummail-mzansi.onrender.com/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export function SetupScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
