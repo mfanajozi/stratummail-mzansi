@@ -93,38 +93,15 @@ app.post('/api/account/validate', async (req, res) => {
     const { email, password } = req.body;
     
     const domain = email.split('@')[1].toLowerCase();
-    let imapHost, imapPort, smtpHost, smtpPort, security;
+    const mailHost = `mail.${domain}`;
+    const imapPort = 993;
+    const smtpPort = 465;
+    const security = 'ssl';
 
-    if (domain.includes('gmail') || domain.includes('googlemail')) {
-      imapHost = 'imap.gmail.com';
-      imapPort = 993;
-      smtpHost = 'smtp.gmail.com';
-      smtpPort = 465;
-      security = 'ssl';
-    } else if (domain.includes('outlook') || domain.includes('hotmail') || domain.includes('live')) {
-      imapHost = 'outlook.office365.com';
-      imapPort = 993;
-      smtpHost = 'smtp.office365.com';
-      smtpPort = 587;
-      security = 'tls';
-    } else if (domain.includes('yahoo')) {
-      imapHost = 'imap.mail.yahoo.com';
-      imapPort = 993;
-      smtpHost = 'smtp.mail.yahoo.com';
-      smtpPort = 465;
-      security = 'ssl';
-    } else {
-      imapHost = `imap.${domain}`;
-      smtpHost = `smtp.${domain}`;
-      imapPort = 993;
-      smtpPort = 465;
-      security = 'ssl';
-    }
-
-    const testAccount = { email, password, imapHost, imapPort, smtpHost, smtpPort, security };
+    const testAccount = { email, password, imapHost: mailHost, imapPort, smtpHost: mailHost, smtpPort, security };
     await connectImap(testAccount);
 
-    res.json({ imapHost, imapPort, smtpHost, smtpPort, security });
+    res.json({ imapHost: mailHost, imapPort, smtpHost: mailHost, smtpPort, security });
   } catch (error) {
     res.status(400).json({ error: 'Failed to connect. Check email and password.' });
   }
