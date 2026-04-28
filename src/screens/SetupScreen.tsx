@@ -9,12 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAccountsStore } from '../store';
 import { detectImapSettings, validateEmail } from '../utils/imapDetect';
 import { colors, spacing, fontSize, borderRadius } from '../theme';
-import { accountService } from '../services/api';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://stratummail-api.onrender.com/api';
 
 export function SetupScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -50,27 +52,37 @@ export function SetupScreen({ navigation }: any) {
 
     try {
       const imapSettings = detectImapSettings(email);
-      
-      // Demo mode: skip API validation, just add account with detected settings
-      // In production, uncomment the API call below:
-      // await accountService.validate({ email, password });
 
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const validateResponse = await fetch(`${API_URL}/account/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
 
-      const account = {
-        id: Date.now().toString(),
-        email,
-        displayName: displayName || email.split('@')[0],
-        imapHost: imapSettings.imapHost,
-        imapPort: imapSettings.imapPort,
-        smtpHost: imapSettings.smtpHost,
-        smtpPort: imapSettings.smtpPort,
-        security: imapSettings.security,
-        isDefault: true,
-        createdAt: new Date(),
-      };
+      if (!validateResponse.ok) {
+        const errData = await validateResponse.json();
+        throw new Error(errData.error || 'Failed to validate account');
+      }
 
+      const validatedSettings = await validateResponse.json();
+
+      const addResponse = await fetch(`${API_URL}/account/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          displayName: displayName || email.split('@')[0],
+          imapSettings: validatedSettings
+        })
+      });
+
+      if (!addResponse.ok) {
+        const errData = await addResponse.json();
+        throw new Error(errData.error || 'Failed to add account');
+      }
+
+      const account = await addResponse.json();
       addAccount(account);
       setStep('done');
     } catch (err: any) {

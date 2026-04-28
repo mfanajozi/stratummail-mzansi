@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAccountsStore, useEmailsStore, useUIStore } from '../store';
@@ -13,88 +14,53 @@ import { EmailCard } from '../components/EmailCard';
 import { Email } from '../types';
 import { groupEmailsByDate } from '../utils/dateUtils';
 import { colors, spacing, fontSize, borderRadius } from '../theme';
+import { emailService, folderService } from '../services/api';
 
-const MOCK_EMAILS: Email[] = [
-  {
-    id: '1',
-    accountId: '1',
-    subject: 'Meeting reminder',
-    from: { name: 'John Smith', address: 'john@example.com' },
-    to: ['user@example.com'],
-    preview: 'Don\'t forget about our meeting tomorrow at 2pm...',
-    body: 'Don\'t forget about our meeting tomorrow at 2pm to discuss the new project.',
-    date: new Date(),
-    isRead: false,
-    isStarred: false,
-    hasAttachments: false,
-    folder: 'INBOX',
-  },
-  {
-    id: '2',
-    accountId: '1',
-    subject: 'Project update',
-    from: { name: 'Sarah Johnson', address: 'sarah@company.co.za' },
-    to: ['user@example.com'],
-    preview: 'Here\'s the latest update on our ongoing projects...',
-    body: 'Here\'s the latest update on our ongoing projects. Let me know if you have any questions.',
-    date: new Date(Date.now() - 86400000),
-    isRead: true,
-    isStarred: true,
-    hasAttachments: true,
-    folder: 'INBOX',
-  },
-  {
-    id: '3',
-    accountId: '1',
-    subject: 'Invoice attached',
-    from: { name: 'Accounts Dept', address: 'accounts@vendor.co.za' },
-    to: ['user@example.com'],
-    preview: 'Please find attached the invoice for this month...',
-    body: 'Please find attached the invoice for this month. Payment is due within 30 days.',
-    date: new Date(Date.now() - 172800000),
-    isRead: true,
-    isStarred: false,
-    hasAttachments: true,
-    folder: 'INBOX',
-  },
-  {
-    id: '4',
-    accountId: '1',
-    subject: 'Weekly newsletter',
-    from: { name: 'Tech Weekly', address: 'newsletter@techweekly.com' },
-    to: ['user@example.com'],
-    preview: 'This week in tech: new AI developments, startup news...',
-    body: 'This week in tech: new AI developments, startup news, and more.',
-    date: new Date(Date.now() - 432000000),
-    isRead: false,
-    isStarred: false,
-    hasAttachments: false,
-    folder: 'INBOX',
-  },
-];
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://stratummail-api.onrender.com/api';
 
 export function InboxScreen({ navigation }: any) {
   const { accounts, activeAccountId } = useAccountsStore();
-  const { emails, setEmails, setSelectedEmail } = useEmailsStore();
-  const { currentFolder, setComposeModalVisible } = useUIStore();
+  const { emails, setEmails, setSelectedEmail, setFolders, folders } = useEmailsStore();
+  const { currentFolder, setCurrentFolder } = useUIStore();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<string>('Today');
+  const [loading, setLoading] = useState(false);
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId);
-  const accountEmails = activeAccountId ? emails[activeAccountId] || MOCK_EMAILS : MOCK_EMAILS;
+  const accountEmails = activeAccountId ? emails[activeAccountId] || [] : [];
   const groupedEmails = groupEmailsByDate(accountEmails);
+
+  const fetchEmails = useCallback(async () => {
+    if (!activeAccountId || !activeAccount?.id) return;
+    
+    setLoading(true);
+    try {
+      const accountId = activeAccount.id;
+      const folder = currentFolder || 'INBOX';
+      
+      const [fetchedEmails, fetchedFolders] = await Promise.all([
+        fetch(`${API_URL}/emails/${accountId}?folder=${folder}`).then(r => r.json()),
+        fetch(`${API_URL}/folders/${accountId}`).then(r => r.json())
+      ]);
+      
+      setEmails(accountId, fetchedEmails);
+      setFolders(accountId, fetchedFolders);
+    } catch (err) {
+      console.error('Failed to fetch emails:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeAccountId, activeAccount, currentFolder, setEmails, setFolders]);
 
   useEffect(() => {
     if (activeAccountId) {
-      setEmails(activeAccountId, MOCK_EMAILS);
+      fetchEmails();
     }
-  }, [activeAccountId]);
+  }, [activeAccountId, currentFolder, fetchEmails]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1500);
+    fetchEmails().finally(() => setRefreshing(false));
   };
 
   const handleEmailPress = (email: Email) => {
@@ -140,54 +106,76 @@ export function InboxScreen({ navigation }: any) {
       </View>
 
       <View style={styles.folderTabs}>
-        <TouchableOpacity
-          style={[styles.folderTab, currentFolder === 'INBOX' && styles.folderTabActive]}
-          onPress={() => {}}
-        >
-          <Text style={[styles.folderTabText, currentFolder === 'INBOX' && styles.folderTabTextActive]}>
-            Inbox
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.folderTab, currentFolder === 'SENT' && styles.folderTabActive]}
-          onPress={() => {}}
-        >
-          <Text style={[styles.folderTabText, currentFolder === 'SENT' && styles.folderTabTextActive]}>
-            Sent
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.folderTab, currentFolder === 'DRAFT' && styles.folderTabActive]}
-          onPress={() => {}}
-        >
-          <Text style={[styles.folderTabText, currentFolder === 'DRAFT' && styles.folderTabTextActive]}>
-            Drafts
-          </Text>
-        </TouchableOpacity>
+        {activeAccountId && folders[activeAccountId] ? (
+          folders[activeAccountId].slice(0, 5).map((folder) => (
+            <TouchableOpacity
+              key={folder.id}
+              style={[styles.folderTab, currentFolder === folder.path && styles.folderTabActive]}
+              onPress={() => setCurrentFolder(folder.path)}
+            >
+              <Text style={[styles.folderTabText, currentFolder === folder.path && styles.folderTabTextActive]}>
+                {folder.name}
+              </Text>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.folderTab, currentFolder === 'INBOX' && styles.folderTabActive]}
+              onPress={() => setCurrentFolder('INBOX')}
+            >
+              <Text style={[styles.folderTabText, currentFolder === 'INBOX' && styles.folderTabTextActive]}>
+                Inbox
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.folderTab, currentFolder === 'Sent' && styles.folderTabActive]}
+              onPress={() => setCurrentFolder('Sent')}
+            >
+              <Text style={[styles.folderTabText, currentFolder === 'Sent' && styles.folderTabTextActive]}>
+                Sent
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.folderTab, currentFolder === 'Drafts' && styles.folderTabActive]}
+              onPress={() => setCurrentFolder('Drafts')}
+            >
+              <Text style={[styles.folderTabText, currentFolder === 'Drafts' && styles.folderTabTextActive]}>
+                Drafts
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
-      <FlatList
-        data={emailGroups}
-        renderItem={renderEmailGroup}
-        keyExtractor={(item) => item.group}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.accent}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <Text style={styles.emptyText}>No emails yet</Text>
-            <Text style={styles.emptySubtext}>
-              Your inbox is empty. Tap compose to send a new email.
-            </Text>
-          </View>
-        }
-      />
+      {loading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      ) : (
+        <FlatList
+          data={emailGroups}
+          renderItem={renderEmailGroup}
+          keyExtractor={(item) => item.group}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.accent}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📭</Text>
+              <Text style={styles.emptyText}>No emails yet</Text>
+              <Text style={styles.emptySubtext}>
+                Your inbox is empty. Pull down to refresh.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
       <TouchableOpacity
         style={styles.fab}
@@ -315,5 +303,11 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: colors.surface,
     lineHeight: 34,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
   },
 });
