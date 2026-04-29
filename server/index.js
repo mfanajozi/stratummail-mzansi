@@ -289,28 +289,38 @@ app.get('/api/emails/:accountId', async (req, res) => {
 
     const messages = await connection.search(['ALL'], { bodies: ['HEADER'], markSeen: false });
     const pageSize = parseInt(limit);
-    // Reverse first so index 0 = newest, then paginate — ensures we always show the most recent emails
-    const newestFirst = [...messages].reverse();
-    const paginatedMessages = newestFirst.slice((pageNum - 1) * pageSize, pageNum * pageSize);
 
-    const emails = paginatedMessages.map((msg) => {
+    // Parse every header once so we can sort by the actual Date: field.
+    // Sorting by IMAP sequence number is unreliable — emails can arrive out of
+    // order, be moved between folders, or the server may return UIDs non-chronologically.
+    const parsed = messages.map((msg) => {
       const headerPart = msg.parts.find((p) => p.which === 'HEADER');
       const headerObj = headerPart ? parseEmailHeaders(headerPart.body) : {};
-      return {
-        id: String(msg.attributes.uid),
-        accountId,
-        subject: headerObj.subject || '(No Subject)',
-        from: headerObj.from || { name: '', address: '' },
-        to: (headerObj.to || []).map((a) => (typeof a === 'string' ? a : a.address || a.name || '')),
-        preview: '',
-        body: '',
-        date: headerObj.date || new Date(),
-        isRead: msg.attributes.flags.includes('\\Seen'),
-        isStarred: msg.attributes.flags.includes('\\Flagged'),
-        hasAttachments: false,
-        folder,
-      };
+      // new Date() with an RFC 2822 string preserves the sender's timezone offset
+      // and stores as UTC internally, so comparisons are always correct.
+      const date = headerObj.date instanceof Date ? headerObj.date : new Date(headerObj.date || 0);
+      return { msg, headerObj, date };
     });
+
+    // Sort newest first by real email date
+    parsed.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    const paginated = parsed.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+
+    const emails = paginated.map(({ msg, headerObj, date }) => ({
+      id: String(msg.attributes.uid),
+      accountId,
+      subject: headerObj.subject || '(No Subject)',
+      from: headerObj.from || { name: '', address: '' },
+      to: (headerObj.to || []).map((a) => (typeof a === 'string' ? a : a.address || a.name || '')),
+      preview: '',
+      body: '',
+      date,
+      isRead: msg.attributes.flags.includes('\\Seen'),
+      isStarred: msg.attributes.flags.includes('\\Flagged'),
+      hasAttachments: false,
+      folder,
+    }));
 
     connection.end();
     res.json(emails);
