@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,8 @@ async function safeJson(res: Response) {
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 const LOGO = require('../../assets/icon.png');
+const POLL_INTERVAL = 30_000;
+const PAGE_SIZE = 50;
 
 function stripHtml(html: string): string {
   return html
@@ -515,12 +517,17 @@ function SettingsPanel({ accounts, activeAccountId, updateDisplayName, signature
 
 export function DesktopLayout() {
   const { accounts, activeAccountId, setActiveAccount, updateDisplayName, logout } = useAccountsStore();
-  const { emails, folders, selectedEmail, setEmails, setFolders, setSelectedEmail, deleteEmail, markAsRead } = useEmailsStore();
+  const { emails, folders, selectedEmail, setEmails, prependEmails, appendEmails, setFolders, setSelectedEmail, deleteEmail, markAsRead } = useEmailsStore();
   const { signatures } = useSignaturesStore();
   const { currentFolder, setCurrentFolder } = useUIStore();
 
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [newCount, setNewCount] = useState(0);
+  const emailsRef = useRef<Email[]>([]);
   const [showCompose, setShowCompose] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [composeReplyTo, setComposeReplyTo] = useState<Email | null>(null);
@@ -529,6 +536,7 @@ export function DesktopLayout() {
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId);
   const accountEmails = activeAccountId ? (emails[activeAccountId] || []) : [];
+  emailsRef.current = accountEmails;
   const accountFolders = activeAccountId ? (folders[activeAccountId] || DEFAULT_FOLDERS) : DEFAULT_FOLDERS;
   const unreadCount = accountEmails.filter((e) => !e.isRead).length;
 
@@ -537,11 +545,14 @@ export function DesktopLayout() {
     setLoadingEmails(true);
     try {
       const [emailsRes, foldersRes] = await Promise.all([
-        fetch(`${API_URL}/emails/${activeAccountId}?folder=${encodeURIComponent(currentFolder)}`),
+        fetch(`${API_URL}/emails/${activeAccountId}?folder=${encodeURIComponent(currentFolder)}&page=1&limit=${PAGE_SIZE}`),
         fetch(`${API_URL}/folders/${activeAccountId}`),
       ]);
       if (emailsRes.ok) setEmails(activeAccountId, await emailsRes.json());
       if (foldersRes.ok) setFolders(activeAccountId, await foldersRes.json());
+      setPage(1);
+      setHasMore(true);
+      setNewCount(0);
     } catch (e) {
       console.error('Fetch failed:', e);
     } finally {
@@ -549,9 +560,60 @@ export function DesktopLayout() {
     }
   }, [activeAccountId, currentFolder]);
 
+  const loadMore = useCallback(async () => {
+    if (!activeAccountId || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const res = await fetch(
+        `${API_URL}/emails/${activeAccountId}?folder=${encodeURIComponent(currentFolder)}&page=${nextPage}&limit=${PAGE_SIZE}`
+      );
+      if (res.ok) {
+        const more: Email[] = await res.json();
+        if (more.length > 0) {
+          appendEmails(activeAccountId, more);
+          setPage(nextPage);
+          setHasMore(more.length >= PAGE_SIZE);
+        } else {
+          setHasMore(false);
+        }
+      }
+    } catch (e) {
+      console.error('Load more failed:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [activeAccountId, currentFolder, page, loadingMore, hasMore]);
+
+  // Live poll — runs every 30 s, uses ref to avoid stale closure
   useEffect(() => {
-    if (activeAccountId) setEmails(activeAccountId, []); // clear stale data immediately
+    if (!activeAccountId) return;
+    const poll = async () => {
+      const latest = emailsRef.current[0];
+      if (!latest) return;
+      try {
+        const since = encodeURIComponent(new Date(latest.date).toISOString());
+        const res = await fetch(
+          `${API_URL}/emails/${activeAccountId}?folder=${encodeURIComponent(currentFolder)}&since=${since}`
+        );
+        if (!res.ok) return;
+        const fresh: Email[] = await res.json();
+        if (fresh.length > 0) {
+          prependEmails(activeAccountId, fresh);
+          setNewCount((n) => n + fresh.length);
+        }
+      } catch { /* silent */ }
+    };
+    const id = setInterval(poll, POLL_INTERVAL);
+    return () => clearInterval(id);
+  }, [activeAccountId, currentFolder]);
+
+  useEffect(() => {
+    if (activeAccountId) setEmails(activeAccountId, []);
     setSelectedEmail(null);
+    setPage(1);
+    setHasMore(true);
+    setNewCount(0);
     fetchEmails();
   }, [activeAccountId, currentFolder]);
 
@@ -619,11 +681,27 @@ export function DesktopLayout() {
             </View>
             <TouchableOpacity
               style={s.refreshBtn}
+              disabled={refreshing || loadingEmails}
               onPress={() => { setRefreshing(true); fetchEmails().finally(() => setRefreshing(false)); }}
             >
-              <Text style={s.refreshIcon}>↻</Text>
+              {refreshing || loadingEmails
+                ? <ActivityIndicator size="small" color={colors.accent} />
+                : <Text style={s.refreshIcon}>↻</Text>}
             </TouchableOpacity>
           </View>
+
+          {/* New-email banner */}
+          {newCount > 0 && (
+            <TouchableOpacity
+              style={s.newBanner}
+              onPress={() => setNewCount(0)}
+              activeOpacity={0.85}
+            >
+              <Text style={s.newBannerText}>
+                ↑  {newCount} new email{newCount !== 1 ? 's' : ''} arrived — tap to dismiss
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {loadingEmails && !refreshing ? (
             <View style={s.loadingCenter}>
@@ -647,6 +725,24 @@ export function DesktopLayout() {
                   onRefresh={() => { setRefreshing(true); fetchEmails().finally(() => setRefreshing(false)); }}
                   tintColor={colors.accent}
                 />
+              }
+              ListFooterComponent={
+                accountEmails.length > 0 ? (
+                  loadingMore ? (
+                    <View style={s.loadMoreWrap}>
+                      <ActivityIndicator size="small" color={colors.accent} />
+                      <Text style={s.loadMoreText}>Loading older emails…</Text>
+                    </View>
+                  ) : hasMore ? (
+                    <TouchableOpacity style={s.loadMoreBtn} onPress={loadMore} activeOpacity={0.8}>
+                      <Text style={s.loadMoreBtnText}>Load 50 more older emails</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={s.loadMoreWrap}>
+                      <Text style={s.allLoadedText}>— All emails loaded —</Text>
+                    </View>
+                  )
+                ) : null
               }
               ListEmptyComponent={
                 <View style={s.listEmpty}>
@@ -917,6 +1013,28 @@ const s = StyleSheet.create({
   listEmpty: { alignItems: 'center', paddingTop: 80, paddingHorizontal: spacing.xl },
   listEmptyIcon: { fontSize: 44, marginBottom: spacing.md, opacity: 0.5 },
   listEmptyText: { fontSize: fontSize.base, color: colors.textMuted, textAlign: 'center' },
+
+  newBanner: {
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+  },
+  newBannerText: { fontSize: fontSize.sm, color: '#FFFFFF', fontWeight: '700' },
+
+  loadMoreBtn: {
+    marginHorizontal: spacing.md,
+    marginVertical: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.accentLight,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(99,102,241,0.2)',
+  },
+  loadMoreBtnText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.accent },
+  loadMoreWrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.lg, gap: spacing.sm },
+  loadMoreText: { fontSize: fontSize.sm, color: colors.textMuted },
+  allLoadedText: { fontSize: fontSize.xs, color: colors.textLight },
 
   // ── Detail panel ──────────────────────────────────────────────────────────
   detailPanel: { flex: 1, backgroundColor: colors.surface },

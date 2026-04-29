@@ -283,28 +283,56 @@ app.get('/api/emails/:accountId', async (req, res) => {
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const pageNum = parseInt(page);
+    const pageSize = parseInt(limit);
+    const { since } = req.query; // ISO string — only return emails newer than this
 
     const connection = await connectImap(account);
     await connection.openBox(folder);
 
-    const messages = await connection.search(['ALL'], { bodies: ['HEADER'], markSeen: false });
-    const pageSize = parseInt(limit);
+    // For live-check polls we use IMAP SINCE to limit the search to recent messages,
+    // then filter precisely by the actual Date: header.
+    let searchCriteria = ['ALL'];
+    if (since) {
+      const sinceDate = new Date(since);
+      // IMAP SINCE has day-level precision; go back one day to avoid missing edge cases
+      const searchFrom = new Date(sinceDate);
+      searchFrom.setDate(searchFrom.getDate() - 1);
+      searchCriteria = [['SINCE', searchFrom]];
+    }
+
+    const messages = await connection.search(searchCriteria, { bodies: ['HEADER'], markSeen: false });
 
     // Parse every header once so we can sort by the actual Date: field.
-    // Sorting by IMAP sequence number is unreliable — emails can arrive out of
-    // order, be moved between folders, or the server may return UIDs non-chronologically.
     const parsed = messages.map((msg) => {
       const headerPart = msg.parts.find((p) => p.which === 'HEADER');
       const headerObj = headerPart ? parseEmailHeaders(headerPart.body) : {};
-      // new Date() with an RFC 2822 string preserves the sender's timezone offset
-      // and stores as UTC internally, so comparisons are always correct.
       const date = headerObj.date instanceof Date ? headerObj.date : new Date(headerObj.date || 0);
       return { msg, headerObj, date };
     });
 
-    // Sort newest first by real email date
-    parsed.sort((a, b) => b.date.getTime() - a.date.getTime());
+    // For `since` queries return only emails strictly newer than the cutoff (no pagination)
+    if (since) {
+      const sinceDate = new Date(since);
+      const newEmails = parsed
+        .filter((item) => item.date.getTime() > sinceDate.getTime())
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .map(({ msg, headerObj, date }) => ({
+          id: String(msg.attributes.uid),
+          accountId,
+          subject: headerObj.subject || '(No Subject)',
+          from: headerObj.from || { name: '', address: '' },
+          to: (headerObj.to || []).map((a) => (typeof a === 'string' ? a : a.address || a.name || '')),
+          preview: '', body: '', date,
+          isRead: msg.attributes.flags.includes('\\Seen'),
+          isStarred: msg.attributes.flags.includes('\\Flagged'),
+          hasAttachments: false, folder,
+        }));
+      connection.end();
+      return res.json(newEmails);
+    }
 
+    // Normal paginated fetch — sort newest first, then slice
+    parsed.sort((a, b) => b.date.getTime() - a.date.getTime());
     const paginated = parsed.slice((pageNum - 1) * pageSize, pageNum * pageSize);
 
     const emails = paginated.map(({ msg, headerObj, date }) => ({
@@ -313,13 +341,10 @@ app.get('/api/emails/:accountId', async (req, res) => {
       subject: headerObj.subject || '(No Subject)',
       from: headerObj.from || { name: '', address: '' },
       to: (headerObj.to || []).map((a) => (typeof a === 'string' ? a : a.address || a.name || '')),
-      preview: '',
-      body: '',
-      date,
+      preview: '', body: '', date,
       isRead: msg.attributes.flags.includes('\\Seen'),
       isStarred: msg.attributes.flags.includes('\\Flagged'),
-      hasAttachments: false,
-      folder,
+      hasAttachments: false, folder,
     }));
 
     connection.end();

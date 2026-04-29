@@ -73,6 +73,8 @@ interface EmailsState {
   isLoading: boolean;
   error: string | null;
   setEmails: (accountId: string, emails: Email[]) => void;
+  prependEmails: (accountId: string, emails: Email[]) => void;
+  appendEmails: (accountId: string, emails: Email[]) => void;
   addEmail: (accountId: string, email: Email) => void;
   markAsRead: (accountId: string, emailId: string) => void;
   markAsUnread: (accountId: string, emailId: string) => void;
@@ -90,6 +92,23 @@ export const useEmailsStore = create<EmailsState>((set) => ({
 
   setEmails: (accountId, emails) =>
     set((state) => ({ emails: { ...state.emails, [accountId]: emails } })),
+
+  prependEmails: (accountId, newEmails) =>
+    set((state) => {
+      const existing = state.emails[accountId] || [];
+      const existingIds = new Set(existing.map((e) => e.id));
+      const fresh = newEmails.filter((e) => !existingIds.has(e.id));
+      if (fresh.length === 0) return state;
+      return { emails: { ...state.emails, [accountId]: [...fresh, ...existing] } };
+    }),
+
+  appendEmails: (accountId, moreEmails) =>
+    set((state) => {
+      const existing = state.emails[accountId] || [];
+      const existingIds = new Set(existing.map((e) => e.id));
+      const unique = moreEmails.filter((e) => !existingIds.has(e.id));
+      return { emails: { ...state.emails, [accountId]: [...existing, ...unique] } };
+    }),
 
   addEmail: (accountId, email) =>
     set((state) => ({
