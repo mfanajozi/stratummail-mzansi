@@ -386,13 +386,24 @@ function ComposePanel({ activeAccountId, accounts, signatures, onClose, replyTo,
 
 // ── Settings panel ─────────────────────────────────────────────────────────────
 
-function SettingsPanel({ accounts, activeAccountId, updateDisplayName, signatures, setSignature, onClose }: any) {
+function SettingsPanel({ accounts, activeAccountId, updateDisplayName, removeAccount, signatures, setSignature, onClose }: any) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [editingSig, setEditingSig] = useState(false);
   const [sigHtml, setSigHtml] = useState('');
+
+  const handleRemove = async (id: string) => {
+    setRemovingId(id);
+    try {
+      // Delete from server so accounts.json is updated
+      await fetch(`${API_URL}/account/${id}`, { method: 'DELETE' });
+    } catch { /* server may be offline; remove from store anyway */ }
+    removeAccount(id);
+    setRemovingId(null);
+  };
 
   const currentSig = activeAccountId ? signatures?.[activeAccountId] : null;
 
@@ -465,9 +476,23 @@ function SettingsPanel({ accounts, activeAccountId, updateDisplayName, signature
                     </TouchableOpacity>
                   </>
                 ) : (
-                  <TouchableOpacity style={s.sBtnSec} onPress={() => { setEditingId(acc.id); setDraft(acc.displayName); setErr(''); }}>
-                    <Text style={s.sBtnSecText}>Edit Name</Text>
-                  </TouchableOpacity>
+                  <>
+                    <TouchableOpacity
+                      style={s.sBtnSec}
+                      onPress={() => { setEditingId(acc.id); setDraft(acc.displayName); setErr(''); }}
+                    >
+                      <Text style={s.sBtnSecText}>Edit Name</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={s.sBtnDanger}
+                      onPress={() => handleRemove(acc.id)}
+                      disabled={removingId === acc.id}
+                    >
+                      {removingId === acc.id
+                        ? <ActivityIndicator color={colors.red} size="small" />
+                        : <Text style={s.sBtnDangerText}>Remove</Text>}
+                    </TouchableOpacity>
+                  </>
                 )}
               </View>
             </View>
@@ -516,7 +541,7 @@ function SettingsPanel({ accounts, activeAccountId, updateDisplayName, signature
 // ── Desktop Layout root ────────────────────────────────────────────────────────
 
 export function DesktopLayout() {
-  const { accounts, activeAccountId, setActiveAccount, updateDisplayName, logout } = useAccountsStore();
+  const { accounts, activeAccountId, setActiveAccount, updateDisplayName, removeAccount, logout } = useAccountsStore();
   const { emails, folders, selectedEmail, setEmails, prependEmails, appendEmails, setFolders, setSelectedEmail, deleteEmail, markAsRead } = useEmailsStore();
   const { signatures } = useSignaturesStore();
   const { currentFolder, setCurrentFolder } = useUIStore();
@@ -793,6 +818,7 @@ export function DesktopLayout() {
           accounts={accounts}
           activeAccountId={activeAccountId}
           updateDisplayName={updateDisplayName}
+          removeAccount={removeAccount}
           signatures={signatures}
           setSignature={useSignaturesStore.getState().setSignature}
           onClose={() => setShowSettings(false)}
@@ -1271,6 +1297,15 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   sBtnSecText: { color: colors.accent, fontWeight: '600', fontSize: fontSize.sm },
+  sBtnDanger: {
+    backgroundColor: '#FEF2F2',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    minWidth: 64,
+    alignItems: 'center',
+  },
+  sBtnDangerText: { color: colors.red, fontWeight: '600', fontSize: fontSize.sm },
 
   // Signature in settings panel
   sigCard: {
