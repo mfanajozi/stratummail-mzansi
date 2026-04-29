@@ -44,24 +44,6 @@ function MainTabs() {
         options={{ tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon="📥" /> }}
       />
       <Tab.Screen
-        name="ComposeTab"
-        component={InboxScreen}
-        options={{
-          tabBarLabel: 'Compose',
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon="✏️" />,
-          tabBarButton: (props) => (
-            <TouchableOpacity {...props} style={tabStyles.fabWrap} activeOpacity={0.85}>
-              <View style={tabStyles.fab}>
-                <Text style={tabStyles.fabIcon}>+</Text>
-              </View>
-            </TouchableOpacity>
-          ),
-        }}
-        listeners={({ navigation }) => ({
-          tabPress: (e) => { e.preventDefault(); navigation.navigate('Compose'); },
-        })}
-      />
-      <Tab.Screen
         name="Settings"
         component={SettingsScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon="⚙️" /> }}
@@ -147,15 +129,4 @@ const tabStyles = StyleSheet.create({
   iconWrapActive: { backgroundColor: colors.accentLight },
   icon: { fontSize: 20 },
   iconActive: { transform: [{ scale: 1.1 }] },
-  fabWrap: { top: -16, alignItems: 'center', justifyContent: 'center', width: 64 },
-  fab: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.button,
-  },
-  fabIcon: { fontSize: 26, color: '#FFFFFF', lineHeight: 30 },
 });

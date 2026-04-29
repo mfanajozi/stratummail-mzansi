@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,11 +24,12 @@ const POLL_INTERVAL = 30_000; // 30 seconds
 const PAGE_SIZE = 50;
 
 export function InboxScreen({ navigation }: any) {
-  const { accounts, activeAccountId } = useAccountsStore();
+  const { accounts, activeAccountId, setActiveAccount } = useAccountsStore();
   const { emails, setEmails, prependEmails, appendEmails, setSelectedEmail, setFolders, folders } = useEmailsStore();
   const { currentFolder, setCurrentFolder } = useUIStore();
 
-  const [loading, setLoading]         = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage]               = useState(1);
@@ -205,8 +207,13 @@ export function InboxScreen({ navigation }: any) {
             ? <ActivityIndicator size="small" color={colors.accent} />
             : <Text style={styles.refreshIcon}>↻</Text>}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.avatarBtn} onPress={() => navigation.navigate('Settings')}>
+        <TouchableOpacity
+          style={styles.avatarBtn}
+          onPress={() => setShowAccountPicker(true)}
+          activeOpacity={0.8}
+        >
           <Avatar initials={initials} seed={activeAccount?.email ?? ''} size="small" />
+          {accounts.length > 1 && <View style={styles.switchDot} />}
         </TouchableOpacity>
       </View>
 
@@ -291,6 +298,68 @@ export function InboxScreen({ navigation }: any) {
         />
       )}
 
+      {/* ── Account switcher modal ── */}
+      <Modal
+        visible={showAccountPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAccountPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.pickerBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowAccountPicker(false)}
+        >
+          {/* Stop taps inside the card from closing the modal */}
+          <TouchableOpacity activeOpacity={1} style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Switch Account</Text>
+            </View>
+
+            {accounts.map((acc) => {
+              const isActive = acc.id === activeAccountId;
+              const acctInitials = getAvatarInitials(acc.email, acc.displayName);
+              return (
+                <TouchableOpacity
+                  key={acc.id}
+                  style={[styles.pickerRow, isActive && styles.pickerRowActive]}
+                  onPress={() => {
+                    setActiveAccount(acc.id);
+                    setShowAccountPicker(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Avatar initials={acctInitials} seed={acc.email} size="medium" />
+                  <View style={styles.pickerRowInfo}>
+                    <Text style={styles.pickerRowName}>{acc.displayName}</Text>
+                    <Text style={styles.pickerRowEmail}>{acc.email}</Text>
+                  </View>
+                  {isActive && (
+                    <View style={styles.pickerActiveBadge}>
+                      <Text style={styles.pickerActiveBadgeText}>Active</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={styles.pickerAddBtn}
+              onPress={() => { setShowAccountPicker(false); navigation.navigate('Setup'); }}
+            >
+              <Text style={styles.pickerAddBtnText}>+ Add another account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.pickerSettingsBtn}
+              onPress={() => { setShowAccountPicker(false); navigation.navigate('Settings'); }}
+            >
+              <Text style={styles.pickerSettingsBtnText}>⚙  Settings</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* ── FAB ── */}
       <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('Compose')} activeOpacity={0.85}>
         <LinearGradient
@@ -330,7 +399,14 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
   refreshIcon: { fontSize: 20, color: colors.accent, fontWeight: '700' },
-  avatarBtn: { marginLeft: spacing.sm },
+  avatarBtn: { marginLeft: spacing.sm, position: 'relative' },
+  switchDot: {
+    position: 'absolute',
+    top: -1, right: -1,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: colors.green,
+    borderWidth: 1.5, borderColor: colors.surface,
+  },
 
   folderRow: {
     flexDirection: 'row', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
@@ -393,4 +469,62 @@ const styles = StyleSheet.create({
   },
   fabGrad: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center' },
   fabIcon: { fontSize: 28, color: '#FFFFFF', lineHeight: 32 },
+
+  // Account picker modal
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.45)',
+    justifyContent: 'flex-start',
+    paddingTop: 96,           // positions card just below the header
+    paddingHorizontal: spacing.lg,
+  },
+  pickerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.xxl,
+    overflow: 'hidden',
+    ...shadows.floating,
+  },
+  pickerHeader: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  pickerTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  pickerRowActive: { backgroundColor: colors.accentLight },
+  pickerRowInfo: { flex: 1, marginLeft: spacing.md },
+  pickerRowName: { fontSize: fontSize.base, fontWeight: '700', color: colors.primary },
+  pickerRowEmail: { fontSize: fontSize.sm, color: colors.secondary, marginTop: 2 },
+  pickerActiveBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  pickerActiveBadgeText: { fontSize: fontSize.xs, color: '#fff', fontWeight: '700' },
+  pickerAddBtn: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+  },
+  pickerAddBtnText: { fontSize: fontSize.base, fontWeight: '600', color: colors.accent },
+  pickerSettingsBtn: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+  },
+  pickerSettingsBtnText: { fontSize: fontSize.base, color: colors.secondary },
 });
