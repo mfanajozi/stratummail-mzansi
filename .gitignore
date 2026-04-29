@@ -42,3 +42,9 @@ yarn-error.*
 
 # Planning folder (local only - not for production)
 /planning-folder
+
+# Server - contains credentials, never commit
+server/accounts.json
+
+# Claude Code local project memory
+.claude/

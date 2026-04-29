@@ -1,16 +1,11 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEmailsStore } from '../store';
 import { Avatar, getAvatarInitials } from '../components/Avatar';
+import { EmailBodyView } from '../components/EmailBodyView';
 import { formatFullDate } from '../utils/dateUtils';
-import { colors, spacing, fontSize, borderRadius } from '../theme';
+import { colors, shadows, spacing, fontSize, borderRadius } from '../theme';
 
 export function EmailViewScreen({ route, navigation }: any) {
   const { selectedEmail } = useEmailsStore();
@@ -18,258 +13,125 @@ export function EmailViewScreen({ route, navigation }: any) {
 
   if (!email) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Email not found</Text>
+      <SafeAreaView style={s.container}>
+        <View style={s.center}>
+          <Text style={s.centerText}>Email not found</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   const initials = getAvatarInitials(email.from.address, email.from.name);
+  const toList = Array.isArray(email.to) ? email.to.join(', ') : String(email.to || '');
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backIcon}>←</Text>
+    <SafeAreaView style={s.container} edges={['top']}>
+      {/* ── Header ── */}
+      <View style={s.header}>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <Text style={s.backIcon}>←</Text>
         </TouchableOpacity>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>↩</Text>
+        <View style={s.headerActions}>
+          <TouchableOpacity style={s.actionBtn} onPress={() => navigation.navigate('Compose', { replyTo: email })}>
+            <Text style={s.actionIcon}>↩</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>☆</Text>
+          <TouchableOpacity style={s.actionBtn} onPress={() => navigation.navigate('Compose', { forward: email })}>
+            <Text style={s.actionIcon}>↪</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>🗑</Text>
+          <TouchableOpacity style={s.actionBtn}>
+            <Text style={s.actionIcon}>☆</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionIcon}>⋮</Text>
+          <TouchableOpacity style={s.actionBtn}>
+            <Text style={s.actionIcon}>🗑</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.subject}>{email.subject || '(No subject)'}</Text>
+      {/* ── Content ── */}
+      <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
+        {/* Subject */}
+        <Text style={s.subject}>{email.subject || '(No subject)'}</Text>
 
-        <View style={styles.senderRow}>
-          <Avatar initials={initials} size="large" />
-          <View style={styles.senderInfo}>
-            <Text style={styles.senderName}>
-              {email.from.name || email.from.address}
-            </Text>
-            <Text style={styles.senderEmail}>{email.from.address}</Text>
-            <View style={styles.recipientRow}>
-              <Text style={styles.recipientLabel}>To: </Text>
-              <Text style={styles.recipientEmail}>
-                {email.to.join(', ')}
-              </Text>
-            </View>
+        {/* Sender card */}
+        <View style={s.senderCard}>
+          <Avatar initials={initials} seed={email.from.address} size="medium" />
+          <View style={s.senderInfo}>
+            <Text style={s.senderName}>{email.from.name || email.from.address}</Text>
+            <Text style={s.senderEmail}>{email.from.address}</Text>
+            {toList ? <Text style={s.toLine}>To: {toList}</Text> : null}
           </View>
-          <Text style={styles.date}>
-            {formatFullDate(email.date)}
-          </Text>
+          <Text style={s.date}>{formatFullDate(email.date)}</Text>
         </View>
 
-        <View style={styles.bodyContainer}>
-          <Text style={styles.body}>{email.body}</Text>
+        {/* Email body — renders HTML or plain text properly */}
+        <View style={s.bodyWrap}>
+          <EmailBodyView body={email.body || email.preview || ''} autoHeight />
         </View>
-
-        {email.hasAttachments && (
-          <View style={styles.attachments}>
-            <Text style={styles.attachmentsHeader}>Attachments</Text>
-            <View style={styles.attachmentList}>
-              <TouchableOpacity style={styles.attachmentItem}>
-                <Text style={styles.attachmentIcon}>📎</Text>
-                <Text style={styles.attachmentName}>document.pdf</Text>
-                <Text style={styles.attachmentSize}>2.4 MB</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </ScrollView>
 
-      <View style={styles.replyBar}>
-        <TouchableOpacity
-          style={styles.replyButton}
-          onPress={() => navigation.navigate('Compose', { replyTo: email })}
-        >
-          <Text style={styles.replyIcon}>↩</Text>
-          <Text style={styles.replyText}>Reply</Text>
+      {/* ── Reply bar ── */}
+      <View style={s.replyBar}>
+        <TouchableOpacity style={s.replyBtn} onPress={() => navigation.navigate('Compose', { replyTo: email })}>
+          <Text style={s.replyBtnIcon}>↩</Text>
+          <Text style={s.replyBtnText}>Reply</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.replyButton}
-          onPress={() => navigation.navigate('Compose', { forward: email })}
-        >
-          <Text style={styles.replyIcon}>↪</Text>
-          <Text style={styles.replyText}>Forward</Text>
+        <TouchableOpacity style={s.replyBtn} onPress={() => navigation.navigate('Compose', { forward: email })}>
+          <Text style={s.replyBtnIcon}>↪</Text>
+          <Text style={s.replyBtnText}>Forward</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.surface,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  centerText: { fontSize: fontSize.lg, color: colors.secondary },
+
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.divider, ...shadows.card,
   },
-  backButton: {
-    padding: spacing.sm,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: colors.primary,
-  },
-  headerActions: {
-    flexDirection: 'row',
-  },
-  actionButton: {
-    padding: spacing.sm,
-    marginLeft: spacing.sm,
-  },
-  actionIcon: {
-    fontSize: 20,
-    color: colors.secondary,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: spacing.lg,
-  },
+  backBtn: { padding: spacing.sm },
+  backIcon: { fontSize: 24, color: colors.accent },
+  headerActions: { flexDirection: 'row' },
+  actionBtn: { padding: spacing.sm, marginLeft: spacing.xs },
+  actionIcon: { fontSize: 20, color: colors.secondary },
+
+  scroll: { flex: 1 },
+
   subject: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: spacing.lg,
-    marginBottom: spacing.lg,
+    fontSize: 20, fontWeight: '800', color: colors.primary,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.md,
+    lineHeight: 28,
   },
-  senderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.xl,
+
+  senderCard: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    marginHorizontal: spacing.lg, marginBottom: spacing.lg,
+    backgroundColor: colors.background, borderRadius: borderRadius.xl,
+    padding: spacing.lg, borderWidth: 1, borderColor: colors.divider, ...shadows.card,
   },
-  senderInfo: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  senderName: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  senderEmail: {
-    fontSize: fontSize.md,
-    color: colors.secondary,
-  },
-  recipientRow: {
-    flexDirection: 'row',
-    marginTop: spacing.xs,
-  },
-  recipientLabel: {
-    fontSize: fontSize.sm,
-    color: colors.secondary,
-  },
-  recipientEmail: {
-    fontSize: fontSize.sm,
-    color: colors.secondary,
-  },
-  date: {
-    fontSize: fontSize.xs,
-    color: colors.textLight,
-  },
-  bodyContainer: {
-    paddingBottom: spacing.xxl,
-  },
-  body: {
-    fontSize: fontSize.base,
-    color: colors.primary,
-    lineHeight: 24,
-  },
-  attachments: {
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    paddingTop: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  attachmentsHeader: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-    color: colors.primary,
-    marginBottom: spacing.md,
-  },
-  attachmentList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  attachmentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  attachmentIcon: {
-    fontSize: 16,
-    marginRight: spacing.sm,
-  },
-  attachmentName: {
-    fontSize: fontSize.md,
-    color: colors.accent,
-    marginRight: spacing.sm,
-  },
-  attachmentSize: {
-    fontSize: fontSize.sm,
-    color: colors.secondary,
-  },
+  senderInfo: { flex: 1, marginLeft: spacing.md },
+  senderName: { fontSize: fontSize.base, fontWeight: '700', color: colors.primary },
+  senderEmail: { fontSize: fontSize.sm, color: colors.secondary, marginTop: 2 },
+  toLine: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: 4 },
+  date: { fontSize: fontSize.xs, color: colors.textLight, marginLeft: spacing.sm, textAlign: 'right' },
+
+  bodyWrap: { paddingHorizontal: spacing.lg, paddingBottom: 24 },
+
   replyBar: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    padding: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    backgroundColor: colors.surface,
+    flexDirection: 'row', justifyContent: 'center',
+    padding: spacing.lg, borderTopWidth: 1, borderTopColor: colors.divider,
+    backgroundColor: colors.surface, gap: spacing.md,
   },
-  replyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: borderRadius.full,
-    marginHorizontal: spacing.sm,
+  replyBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.accentLight, paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl, borderRadius: borderRadius.full, gap: spacing.sm,
   },
-  replyIcon: {
-    fontSize: 18,
-    color: colors.accent,
-    marginRight: spacing.sm,
-  },
-  replyText: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-    color: colors.accent,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorText: {
-    fontSize: fontSize.lg,
-    color: colors.secondary,
-  },
+  replyBtnIcon: { fontSize: 16, color: colors.accent },
+  replyBtnText: { fontSize: fontSize.base, fontWeight: '600', color: colors.accent },
 });

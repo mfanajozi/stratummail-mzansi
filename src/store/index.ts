@@ -1,15 +1,20 @@
 import { create } from 'zustand';
 import { Account, Email, Folder, Signature } from '../types';
 
+// ── Accounts ───────────────────────────────────────────────────────────────────
+
 interface AccountsState {
   accounts: Account[];
   activeAccountId: string | null;
   isLoading: boolean;
   error: string | null;
   addAccount: (account: Account) => void;
+  loadAccounts: (accounts: Account[], preserveActiveId?: string | null) => void;
   removeAccount: (id: string) => void;
   setActiveAccount: (id: string) => void;
   setDefaultAccount: (id: string) => void;
+  updateDisplayName: (id: string, displayName: string) => void;
+  logout: () => void;
 }
 
 export const useAccountsStore = create<AccountsState>((set) => ({
@@ -17,28 +22,49 @@ export const useAccountsStore = create<AccountsState>((set) => ({
   activeAccountId: null,
   isLoading: false,
   error: null,
+
   addAccount: (account) =>
     set((state) => ({
       accounts: [...state.accounts, account],
       activeAccountId: account.id,
     })),
+
+  loadAccounts: (loaded, preserveActiveId) =>
+    set(() => ({
+      accounts: loaded,
+      activeAccountId:
+        preserveActiveId !== undefined
+          ? preserveActiveId
+          : loaded.find((a) => a.isDefault)?.id ?? loaded[0]?.id ?? null,
+    })),
+
+  logout: () => set({ activeAccountId: null }),
+
   removeAccount: (id) =>
     set((state) => ({
       accounts: state.accounts.filter((a) => a.id !== id),
       activeAccountId:
         state.activeAccountId === id
-          ? state.accounts[0]?.id || null
+          ? state.accounts.find((a) => a.id !== id)?.id ?? null
           : state.activeAccountId,
     })),
+
   setActiveAccount: (id) => set({ activeAccountId: id }),
+
   setDefaultAccount: (id) =>
     set((state) => ({
-      accounts: state.accounts.map((a) => ({
-        ...a,
-        isDefault: a.id === id,
-      })),
+      accounts: state.accounts.map((a) => ({ ...a, isDefault: a.id === id })),
+    })),
+
+  updateDisplayName: (id, displayName) =>
+    set((state) => ({
+      accounts: state.accounts.map((a) =>
+        a.id === id ? { ...a, displayName } : a
+      ),
     })),
 }));
+
+// ── Emails ─────────────────────────────────────────────────────────────────────
 
 interface EmailsState {
   emails: Record<string, Email[]>;
@@ -61,10 +87,10 @@ export const useEmailsStore = create<EmailsState>((set) => ({
   selectedEmail: null,
   isLoading: false,
   error: null,
+
   setEmails: (accountId, emails) =>
-    set((state) => ({
-      emails: { ...state.emails, [accountId]: emails },
-    })),
+    set((state) => ({ emails: { ...state.emails, [accountId]: emails } })),
+
   addEmail: (accountId, email) =>
     set((state) => ({
       emails: {
@@ -72,6 +98,7 @@ export const useEmailsStore = create<EmailsState>((set) => ({
         [accountId]: [email, ...(state.emails[accountId] || [])],
       },
     })),
+
   markAsRead: (accountId, emailId) =>
     set((state) => ({
       emails: {
@@ -80,7 +107,12 @@ export const useEmailsStore = create<EmailsState>((set) => ({
           e.id === emailId ? { ...e, isRead: true } : e
         ),
       },
+      selectedEmail:
+        state.selectedEmail?.id === emailId
+          ? { ...state.selectedEmail, isRead: true }
+          : state.selectedEmail,
     })),
+
   markAsUnread: (accountId, emailId) =>
     set((state) => ({
       emails: {
@@ -90,19 +122,26 @@ export const useEmailsStore = create<EmailsState>((set) => ({
         ),
       },
     })),
+
   deleteEmail: (accountId, emailId) =>
     set((state) => ({
       emails: {
         ...state.emails,
-        [accountId]: (state.emails[accountId] || []).filter((e) => e.id !== emailId),
+        [accountId]: (state.emails[accountId] || []).filter(
+          (e) => e.id !== emailId
+        ),
       },
+      selectedEmail:
+        state.selectedEmail?.id === emailId ? null : state.selectedEmail,
     })),
+
   setSelectedEmail: (email) => set({ selectedEmail: email }),
+
   setFolders: (accountId, folders) =>
-    set((state) => ({
-      folders: { ...state.folders, [accountId]: folders },
-    })),
+    set((state) => ({ folders: { ...state.folders, [accountId]: folders } })),
 }));
+
+// ── Signatures ─────────────────────────────────────────────────────────────────
 
 interface SignaturesState {
   signatures: Record<string, Signature>;
@@ -120,11 +159,13 @@ export const useSignaturesStore = create<SignaturesState>((set) => ({
     })),
   removeSignature: (accountId) =>
     set((state) => {
-      const newSignatures = { ...state.signatures };
-      delete newSignatures[accountId];
-      return { signatures: newSignatures };
+      const next = { ...state.signatures };
+      delete next[accountId];
+      return { signatures: next };
     }),
 }));
+
+// ── UI ─────────────────────────────────────────────────────────────────────────
 
 interface UIState {
   isComposeModalVisible: boolean;

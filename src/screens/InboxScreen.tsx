@@ -7,14 +7,16 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAccountsStore, useEmailsStore, useUIStore } from '../store';
 import { EmailCard } from '../components/EmailCard';
+import { Avatar, getAvatarInitials } from '../components/Avatar';
 import { Email } from '../types';
 import { groupEmailsByDate } from '../utils/dateUtils';
-import { colors, spacing, fontSize, borderRadius } from '../theme';
-import { emailService, folderService } from '../services/api';
+import { colors, shadows, spacing, fontSize, borderRadius } from '../theme';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -23,30 +25,37 @@ export function InboxScreen({ navigation }: any) {
   const { emails, setEmails, setSelectedEmail, setFolders, folders } = useEmailsStore();
   const { currentFolder, setCurrentFolder } = useUIStore();
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<string>('Today');
   const [loading, setLoading] = useState(false);
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId);
   const accountEmails = activeAccountId ? emails[activeAccountId] || [] : [];
+  const accountFolders = activeAccountId ? folders[activeAccountId] : undefined;
   const groupedEmails = groupEmailsByDate(accountEmails);
 
   const fetchEmails = useCallback(async () => {
     if (!activeAccountId || !activeAccount?.id) return;
-    
     setLoading(true);
     try {
       const accountId = activeAccount.id;
       const folder = currentFolder || 'INBOX';
-      
-      const [fetchedEmails, fetchedFolders] = await Promise.all([
-        fetch(`${API_URL}/emails/${accountId}?folder=${folder}`).then(r => r.json()),
-        fetch(`${API_URL}/folders/${accountId}`).then(r => r.json())
+
+      const [emailsRes, foldersRes] = await Promise.all([
+        fetch(`${API_URL}/emails/${accountId}?folder=${encodeURIComponent(folder)}`),
+        fetch(`${API_URL}/folders/${accountId}`),
       ]);
-      
+
+      if (!emailsRes.ok) throw new Error((await emailsRes.json()).error || 'Failed to fetch emails');
+      if (!foldersRes.ok) throw new Error((await foldersRes.json()).error || 'Failed to fetch folders');
+
+      const [fetchedEmails, fetchedFolders] = await Promise.all([
+        emailsRes.json(),
+        foldersRes.json(),
+      ]);
+
       setEmails(accountId, fetchedEmails);
       setFolders(accountId, fetchedFolders);
     } catch (err) {
-      console.error('Failed to fetch emails:', err);
+      console.error('Failed to fetch:', err);
     } finally {
       setLoading(false);
     }
@@ -54,260 +63,260 @@ export function InboxScreen({ navigation }: any) {
 
   useEffect(() => {
     if (activeAccountId) {
+      // Clear stale emails immediately so previous folder's emails aren't shown
+      setEmails(activeAccountId, []);
       fetchEmails();
     }
-  }, [activeAccountId, currentFolder, fetchEmails]);
+  }, [activeAccountId, currentFolder]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchEmails().finally(() => setRefreshing(false));
-  };
+  const onRefresh = () => { setRefreshing(true); fetchEmails().finally(() => setRefreshing(false)); };
 
   const handleEmailPress = (email: Email) => {
     setSelectedEmail(email);
     navigation.navigate('EmailView', { emailId: email.id });
   };
 
-  const renderEmailGroup = ({ item }: { item: { group: string; emails: Email[] } }) => (
-    <View style={styles.groupSection}>
-      <Text style={styles.groupHeader}>{item.group}</Text>
-      {item.emails.map((email) => (
-        <EmailCard
-          key={email.id}
-          email={email}
-          onPress={handleEmailPress}
-        />
-      ))}
-    </View>
-  );
-
   const emailGroups = Object.entries(groupedEmails).map(([group, emails]) => ({
     group,
     emails: emails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
   }));
 
+  const displayFolders = accountFolders ?? [
+    { id: 'INBOX', name: 'Inbox', path: 'INBOX', unreadCount: 0, isSpecial: true },
+    { id: 'Sent',  name: 'Sent',  path: 'Sent',  unreadCount: 0, isSpecial: true },
+    { id: 'Drafts', name: 'Drafts', path: 'Drafts', unreadCount: 0, isSpecial: true },
+  ];
+
+  const unreadCount = accountEmails.filter((e) => !e.isRead).length;
+  const initials = activeAccount ? getAvatarInitials(activeAccount.email, activeAccount.displayName) : '?';
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.accountName}>
+        <Image source={require('../../assets/icon.png')} style={styles.headerLogo} resizeMode="cover" />
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
             {activeAccount?.displayName || 'Inbox'}
           </Text>
-          <Text style={styles.accountEmail}>
-            {activeAccount?.email || ''}
+          <Text style={styles.headerSub} numberOfLines={1}>
+            {activeAccount?.email || 'No account'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.accountSwitcher}
-          onPress={() => navigation.navigate('Accounts')}
-        >
-          <Text style={styles.accountSwitcherIcon}>☰</Text>
+        <TouchableOpacity style={styles.avatarBtn} onPress={() => navigation.navigate('Settings')}>
+          <Avatar initials={initials} seed={activeAccount?.email ?? ''} size="small" />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.folderTabs}>
-        {activeAccountId && folders[activeAccountId] ? (
-          folders[activeAccountId].slice(0, 5).map((folder) => (
+      {/* ── Folder tabs ── */}
+      <View style={styles.folderRow}>
+        {displayFolders.slice(0, 5).map((folder) => {
+          const active = currentFolder === folder.path;
+          return (
             <TouchableOpacity
               key={folder.id}
-              style={[styles.folderTab, currentFolder === folder.path && styles.folderTabActive]}
+              style={[styles.folderTab, active && styles.folderTabActive]}
               onPress={() => setCurrentFolder(folder.path)}
+              activeOpacity={0.8}
             >
-              <Text style={[styles.folderTabText, currentFolder === folder.path && styles.folderTabTextActive]}>
-                {folder.name}
-              </Text>
+              {active ? (
+                <LinearGradient
+                  colors={['#818CF8', '#6366F1']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.folderTabGrad}
+                >
+                  <Text style={styles.folderTabTextActive}>{folder.name}</Text>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.folderTabText}>{folder.name}</Text>
+              )}
             </TouchableOpacity>
-          ))
-        ) : (
-          <>
-            <TouchableOpacity
-              style={[styles.folderTab, currentFolder === 'INBOX' && styles.folderTabActive]}
-              onPress={() => setCurrentFolder('INBOX')}
-            >
-              <Text style={[styles.folderTabText, currentFolder === 'INBOX' && styles.folderTabTextActive]}>
-                Inbox
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.folderTab, currentFolder === 'Sent' && styles.folderTabActive]}
-              onPress={() => setCurrentFolder('Sent')}
-            >
-              <Text style={[styles.folderTabText, currentFolder === 'Sent' && styles.folderTabTextActive]}>
-                Sent
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.folderTab, currentFolder === 'Drafts' && styles.folderTabActive]}
-              onPress={() => setCurrentFolder('Drafts')}
-            >
-              <Text style={[styles.folderTabText, currentFolder === 'Drafts' && styles.folderTabTextActive]}>
-                Drafts
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
+          );
+        })}
       </View>
 
+      {/* ── Unread bar ── */}
+      {unreadCount > 0 && (
+        <View style={styles.unreadBar}>
+          <View style={styles.unreadDot} />
+          <Text style={styles.unreadBarText}>{unreadCount} unread message{unreadCount !== 1 ? 's' : ''}</Text>
+        </View>
+      )}
+
+      {/* ── Email list ── */}
       {loading && !refreshing ? (
-        <View style={styles.loadingContainer}>
+        <View style={styles.loadingCenter}>
           <ActivityIndicator size="large" color={colors.accent} />
+          <Text style={styles.loadingText}>Loading…</Text>
         </View>
       ) : (
         <FlatList
           data={emailGroups}
-          renderItem={renderEmailGroup}
+          renderItem={({ item }) => (
+            <View style={styles.groupSection}>
+              <View style={styles.groupHeaderRow}>
+                <Text style={styles.groupHeader}>{item.group}</Text>
+                <View style={styles.groupHeaderLine} />
+              </View>
+              {item.emails.map((email) => (
+                <EmailCard key={email.id} email={email} onPress={handleEmailPress} />
+              ))}
+            </View>
+          )}
           keyExtractor={(item) => item.group}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.accent}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>📭</Text>
               <Text style={styles.emptyText}>No emails yet</Text>
-              <Text style={styles.emptySubtext}>
-                Your inbox is empty. Pull down to refresh.
-              </Text>
+              <Text style={styles.emptySub}>Pull down to refresh</Text>
             </View>
           }
         />
       )}
 
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('Compose')}
-      >
-        <Text style={styles.fabIcon}>+</Text>
+      {/* ── FAB ── */}
+      <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('Compose')} activeOpacity={0.85}>
+        <LinearGradient
+          colors={['#818CF8', '#6366F1', '#4F46E5']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabGrad}
+        >
+          <Text style={styles.fabIcon}>+</Text>
+        </LinearGradient>
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+
+  // Header
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
+    ...shadows.card,
   },
-  headerLeft: {
-    flex: 1,
+  headerLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    marginRight: spacing.md,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  accountName: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  accountEmail: {
-    fontSize: fontSize.sm,
-    color: colors.secondary,
-  },
-  accountSwitcher: {
-    padding: spacing.sm,
-  },
-  accountSwitcherIcon: {
-    fontSize: 24,
-    color: colors.secondary,
-  },
-  folderTabs: {
+  headerCenter: { flex: 1 },
+  headerTitle: { fontSize: fontSize.lg, fontWeight: '800', color: colors.primary },
+  headerSub: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 1 },
+  avatarBtn: { marginLeft: spacing.md },
+
+  // Folder tabs
+  folderRow: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
+    gap: spacing.sm,
   },
-  folderTab: {
-    paddingVertical: spacing.sm,
+  folderTab: { borderRadius: borderRadius.full, overflow: 'hidden' },
+  folderTabActive: { ...shadows.button },
+  folderTabGrad: {
+    paddingVertical: spacing.sm - 1,
     paddingHorizontal: spacing.lg,
-    marginRight: spacing.sm,
     borderRadius: borderRadius.full,
   },
-  folderTabActive: {
-    backgroundColor: colors.accent,
-  },
   folderTabText: {
-    fontSize: fontSize.md,
-    color: colors.secondary,
+    paddingVertical: spacing.sm - 1,
+    paddingHorizontal: spacing.md,
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
     fontWeight: '500',
   },
   folderTabTextActive: {
-    color: colors.surface,
-  },
-  list: {
-    paddingTop: spacing.sm,
-    paddingBottom: 100,
-  },
-  groupSection: {
-    marginBottom: spacing.sm,
-  },
-  groupHeader: {
     fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.secondary,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Unread indicator
+  unreadBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.background,
+    backgroundColor: colors.accentLight,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(99,102,241,0.15)',
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
+  unreadDot: {
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: colors.accent,
+    marginRight: spacing.sm,
+  },
+  unreadBarText: { fontSize: fontSize.xs, color: colors.accent, fontWeight: '600' },
+
+  // List
+  list: { paddingTop: spacing.sm, paddingBottom: 100 },
+  groupSection: { marginBottom: spacing.sm },
+  groupHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 100,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: spacing.md,
+  groupHeader: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginRight: spacing.md,
   },
-  emptyText: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.primary,
-    marginBottom: spacing.sm,
-  },
-  emptySubtext: {
-    fontSize: fontSize.md,
-    color: colors.secondary,
-    textAlign: 'center',
-    paddingHorizontal: spacing.xxl,
-  },
+  groupHeaderLine: { flex: 1, height: 1, backgroundColor: colors.divider },
+
+  // Loading / empty
+  loadingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80 },
+  loadingText: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: spacing.md },
+  emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: spacing.xxl },
+  emptyIcon: { fontSize: 60, marginBottom: spacing.lg, opacity: 0.6 },
+  emptyText: { fontSize: fontSize.xl, fontWeight: '700', color: colors.secondary, marginBottom: spacing.sm },
+  emptySub: { fontSize: fontSize.base, color: colors.textLight },
+
+  // FAB
   fab: {
     position: 'absolute',
     right: spacing.xl,
     bottom: spacing.xl,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent,
+    borderRadius: 30,
+    overflow: 'hidden',
+    ...shadows.button,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  fabGrad: {
+    width: 58,
+    height: 58,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
   },
-  fabIcon: {
-    fontSize: 32,
-    color: colors.surface,
-    lineHeight: 34,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
-  },
+  fabIcon: { fontSize: 28, color: '#FFFFFF', lineHeight: 32 },
 });
