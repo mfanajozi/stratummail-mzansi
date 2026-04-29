@@ -573,10 +573,13 @@ export function DesktopLayout() {
         fetch(`${API_URL}/emails/${activeAccountId}?folder=${encodeURIComponent(currentFolder)}&page=1&limit=${PAGE_SIZE}`),
         fetch(`${API_URL}/folders/${activeAccountId}`),
       ]);
-      if (emailsRes.ok) setEmails(activeAccountId, await emailsRes.json());
+      if (emailsRes.ok) {
+        const fetched = await emailsRes.json();
+        setEmails(activeAccountId, fetched);
+        setHasMore(fetched.length >= PAGE_SIZE);
+      }
       if (foldersRes.ok) setFolders(activeAccountId, await foldersRes.json());
       setPage(1);
-      setHasMore(true);
       setNewCount(0);
     } catch (e) {
       console.error('Fetch failed:', e);
@@ -637,9 +640,8 @@ export function DesktopLayout() {
     if (activeAccountId) setEmails(activeAccountId, []);
     setSelectedEmail(null);
     setPage(1);
-    setHasMore(true);
     setNewCount(0);
-    fetchEmails();
+    fetchEmails(); // fetchEmails sets hasMore based on returned count
   }, [activeAccountId, currentFolder]);
 
   const handleEmailSelect = async (email: Email) => {

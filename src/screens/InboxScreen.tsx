@@ -64,10 +64,13 @@ export function InboxScreen({ navigation }: any) {
         fetch(`${API_URL}/emails/${activeAccountId}?folder=${encodeURIComponent(currentFolder)}&page=1&limit=${PAGE_SIZE}`),
         fetch(`${API_URL}/folders/${activeAccountId}`),
       ]);
-      if (emailsRes.ok)  setEmails(activeAccountId, await emailsRes.json());
+      if (emailsRes.ok) {
+        const fetched = await emailsRes.json();
+        setEmails(activeAccountId, fetched);
+        setHasMore(fetched.length >= PAGE_SIZE);
+      }
       if (foldersRes.ok) setFolders(activeAccountId, await foldersRes.json());
       setPage(1);
-      setHasMore(true);
       setNewCount(0);
     } catch (err) {
       console.error('Fetch failed:', err);
@@ -132,9 +135,8 @@ export function InboxScreen({ navigation }: any) {
     if (activeAccountId) {
       setEmails(activeAccountId, []);
       setPage(1);
-      setHasMore(true);
       setNewCount(0);
-      fetchEmails();
+      fetchEmails(); // fetchEmails sets hasMore based on returned count
     }
   }, [activeAccountId, currentFolder]);
 
